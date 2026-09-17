@@ -1,0 +1,7 @@
+# Your disc image and everything derived from it - never committed.
+iso/*
+!iso/PUT_YOUR_ISO_HERE.txt
+build/
+out/
+__pycache__/
+*.pyc
