@@ -1,0 +1,276 @@
+# DMC Model Extractor
+
+Pulls the 3D models out of **Devil May Cry HD Collection (PS3)** and writes them
+as `.obj` files you can open in Blender.
+
+You drop your disc image into the `iso/` folder and run **one command**.
+
+| Game | What you get | Count |
+|---|---|---|
+| DMC1 | weapons, players, enemies | 10 + 5 + 49 |
+| DMC2 | players, enemies (weapons are parts of the player models) | 48 |
+| DMC3 | weapons | 121 |
+
+The file formats are undocumented — no public spec, and no Noesis or Blender
+plugin exists for DMC1/DMC2. They were reverse-engineered for this repo. Format
+notes are in the comments at the top of `bdp.py`, `dmcmesh.py` and `modbe2.py`.
+
+---
+
+## 1. What you need
+
+### Python
+
+**Python 3.6 or newer.** Developed and tested on **3.14.5**.
+
+To check if you have it, open a terminal (on Windows: press `Win`, type
+`powershell`, press Enter) and type:
+
+```powershell
+python --version
+```
+
+If you see something like `Python 3.14.5`, you're set. If you get an error,
+install it from <https://www.python.org/downloads/> and **tick "Add Python to
+PATH"** during setup.
+
+### Dependencies
+
+**None.** There is nothing to `pip install`. The scripts use only Python's
+built-in standard library (`struct`, `os`, `sys`, `glob`, `math`, `shutil`,
+`subprocess`, `re`, `collections`).
+
+### 7-Zip
+
+Used to read files out of the `.iso`. Install from <https://www.7-zip.org/>.
+
+You do **not** need to configure anything — the extractor finds it on your PATH,
+and also checks `C:\Program Files\7-Zip\7z.exe` automatically.
+
+### The game
+
+Your own **Devil May Cry HD Collection (PS3)** disc image — a single file of
+about 10 GB ending in `.iso`. **This repo contains no game data** and will not
+get you any.
+
+### Disk space
+
+About **5 GB** free, on top of the ISO itself.
+
+### Optional
+
+**Blender** (<https://www.blender.org/>) to view the results. Any program that
+opens OBJ files works.
+
+---
+
+## 2. How to run it
+
+### Step 1 — put your ISO in the `iso/` folder
+
+There is an empty folder named `iso/` in this repo. Copy your `.iso` into it.
+
+```
+dmc-model-extractor/
+├── iso/
+│   └── Devil May Cry - HD Collection (USA) (En,Ja,Fr,De,Es,It).iso   <- your file
+├── dmcextract.py
+└── ...
+```
+
+The name does not matter. The extractor uses the first `.iso` it finds there.
+
+### Step 2 — run one command
+
+```powershell
+python dmcextract.py
+```
+
+That's it. It does not matter which folder you run it from — everything is
+resolved relative to the script.
+
+### What you'll see
+
+```
+ISO:   ...\iso\Devil May Cry - HD Collection (USA) ....iso
+7-Zip: C:\Program Files\7-Zip\7z.exe
+
+[1/4] Reading the ISO (this takes a few minutes, ~4.2 GB)
+[2/4] Unpacking the DMC1 and DMC2 bundles
+[3/4] Converting DMC1 and DMC2 to OBJ
+OK   pw08             meshes=  3 verts=   376 tris=   236 nrmlen=1.0000
+...
+[4/4] Unpacking and converting DMC3 weapons
+
+Done. OBJ files written to ...\out:
+   DMC1_enemies       49
+   DMC1_players        5
+   DMC1_weapons       10
+   DMC2_models        48
+   DMC3_weapons      121
+```
+
+The first run takes a few minutes. **Running it again is safe** — it skips the
+slow ISO step and reuses what it already extracted.
+
+### Where your models are
+
+```
+out/
+├── DMC1_weapons/     pw01.obj ... pw0a.obj      <- all 10 DMC1 weapons
+├── DMC1_players/     pl00.obj ...
+├── DMC1_enemies/     em00.obj ...
+├── DMC2_models/      pl00_gm.obj, em00_gm.obj ...
+└── DMC3_weapons/     PLWP_SHOTGUN_PAC_01.obj ...
+```
+
+> ✅ **`nrmlen=1.0000` in the output is your proof it worked.** That's the
+> average length of the surface normals. Geometry read correctly always gives
+> exactly 1.0000. Anything else means the file was misread.
+
+### If the `iso/` folder is empty
+
+The extractor prints where it looked and **does nothing at all** — no files
+created, no changes:
+
+```
+No .iso found in:
+    ...\dmc-model-extractor\iso
+
+Put your Devil May Cry HD Collection (PS3) disc image in that
+folder and run this again. Nothing was changed.
+```
+
+---
+
+## 3. Folders it creates
+
+| Folder | What it is | Safe to delete? |
+|---|---|---|
+| `iso/` | where **you** put your disc image | it's your file |
+| `build/` | intermediate files pulled from the ISO (~4.4 GB) | yes — regenerated on the next run |
+| `out/` | **your finished `.obj` models** | that's the product, keep it |
+
+`build/` and `out/` are in `.gitignore`, so they are never committed. Delete
+`build/` when you're done to reclaim the space.
+
+---
+
+## 4. The DMC1 weapons
+
+All ten. The names are educated guesses from the shape and size of each model —
+check them against the game before relying on them.
+
+| File | Verts / Tris | Looks like |
+|---|---|---|
+| `pw01.obj` | 284 / 156 | handgun (Ebony / Ivory) |
+| `pw02.obj` | 618 / 297 | slim long-barrelled gun |
+| `pw03.obj` | 592 / 365 | shotgun |
+| `pw04.obj` | 401 / 308 | compact launcher |
+| `pw05.obj` | 634 / 359 | large gun (Nightmare-β / Needlegun) |
+| `pw06.obj` | 702 / 432 | straight broadsword (Force Edge) |
+| `pw07.obj` | 528 / 362 | winged-guard sword (Alastor) |
+| `pw08.obj` | 376 / 236 | wide bat-wing guard (Sparda) |
+| `pw09.obj` | 679 / 481 | curved blade |
+| `pw0a.obj` | 346 / 251 | thin katana (Yamato) |
+
+Five compact plus five long-bladed matches DMC1's five guns and five melee weapons.
+
+---
+
+## 5. Running the individual scripts
+
+You do **not** need any of this if you just ran `dmcextract.py`. It is here for
+picking apart single files or poking at the formats.
+
+| Script | How you run it | What it does |
+|---|---|---|
+| `dmcextract.py` | `python dmcextract.py` | **the whole pipeline** — start here |
+| `bdp.py` | `python bdp.py <file.BDP>` | prints what's inside a bundle; extracts nothing |
+| `extract.py` | `python extract.py [<bundles dir>] [<out dir>]` | bundle → individual game files |
+| `dmc2obj.py` | `python dmc2obj.py <game> <pattern>... <outdir>` | DMC1/DMC2 files → OBJ |
+| `unpack_all.py` | `python unpack_all.py [<GDATA.AFS dir>] [<out dir>]` | DMC3 `.PAC` → `.mod` |
+| `modbe2.py` | `python modbe2.py [<unpacked dir>] [<out dir>]` | DMC3 `.mod` → OBJ |
+| `dmcmesh.py` | not run directly | shared mesh reader used by `dmc2obj.py` |
+
+### `dmc2obj.py` arguments
+
+```
+python dmc2obj.py <game> <pattern> [<pattern> ...] <outdir>
+```
+
+- `<game>` — `dmc1` or `dmc2`. **Not optional and not guessable**: DMC1 data is
+  big-endian, DMC2 little-endian. The wrong one simply finds no meshes.
+- `<pattern>` — which files to convert. Wildcards work. **Put quotes around any
+  pattern containing `*`** so the shell passes it to Python untouched.
+- `<outdir>` — the last argument is always the output folder. Created if missing.
+
+Example — convert just the DMC1 weapons from an existing `build/`:
+
+```powershell
+python dmc2obj.py dmc1 "build/extract/DMC1/data/pld/*.pws" myweapons
+```
+
+### Keeping the files together
+
+`dmc2obj.py` imports `dmcmesh.py`, and `extract.py` imports `bdp.py`. **Keep all
+the `.py` files in one folder** or those imports fail.
+
+---
+
+## 6. When something goes wrong
+
+**`python: command not found` / `'python' is not recognized`**
+Python isn't installed, or wasn't added to PATH. Reinstall and tick "Add Python
+to PATH". On some Linux/macOS systems the command is `python3`.
+
+**`7-Zip was not found`**
+Install it from <https://www.7-zip.org/>. On Windows the default install location
+is detected automatically; otherwise make sure `7z` is on your PATH.
+
+**It says "No .iso found" but my ISO is right there**
+Check the file really ends in `.iso` — Windows hides extensions by default, so
+`game.iso.txt` shows up as `game.iso`. Turn on **View → File name extensions**
+in Explorer.
+
+**`UnicodeEncodeError: 'charmap' codec can't encode character`**
+The Windows console choking on a non-English filename. Run this once in the same
+terminal, then try again:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+```
+
+**An OBJ opens but looks like a scrambled pile of parts**
+Expected for **DMC2 character models**. Their meshes are stored in bone-local
+space — each body part sits at its own origin, and the skeleton has not been
+reverse-engineered, so they cannot be assembled automatically. Move the parts by
+hand in Blender. DMC1 weapons and players do not have this problem.
+
+**`ModuleNotFoundError: No module named 'dmcmesh'`**
+The `.py` files were separated. Keep them all in one folder.
+
+---
+
+## 7. Known limits
+
+- **No textures.** The models have UV coordinates but no images. Texture decoding
+  is not implemented for any of the three games. The raw texture files are pulled
+  out into `build/extract/` (DMC1 `.t32`/`.tm2`, DMC2 `.tm2`) if you want to
+  attack that.
+- **No skeletons and no animation.** Geometry only.
+- **DMC2 has no separate weapon files.** Dante's and Lucia's weapons are
+  sub-meshes inside `pl*_gm.obj` — `pl00_gm` holds his coat and the Rebellion
+  blade. Open it in Blender and pick the parts you want.
+- **Mesh discovery is a validated brute-force scan**, so a file may yield a
+  couple of meshes more or less than the game actually loads.
+- These are PS2-era models — 200–750 vertices for a weapon. They are reference
+  geometry, not modern drop-in assets.
+
+---
+
+## 8. Legal
+
+Tools only. No game data is included or distributed here. Use them on a copy of
+the game you own. The extracted models remain Capcom's property — keep the
+output to personal use.

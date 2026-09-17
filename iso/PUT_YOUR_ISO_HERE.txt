@@ -1,0 +1,14 @@
+Put your Devil May Cry HD Collection (PS3) disc image in this folder.
+
+It is a single file of about 10 GB ending in .iso, for example:
+
+    Devil May Cry - HD Collection (USA) (En,Ja,Fr,De,Es,It).iso
+
+Then run, from the folder above this one:
+
+    python dmcextract.py
+
+The extractor picks up the first .iso it finds here. If this folder is empty it
+does nothing at all.
+
+No game data is included with this repo. Use a copy of a game you own.
