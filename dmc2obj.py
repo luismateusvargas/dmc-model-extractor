@@ -5,6 +5,10 @@
 
 Endianness follows the game: DMC1 is big-endian, DMC2 little-endian.
 See dmcmesh.py for the format itself.
+
+Each mesh becomes one OBJ group named `obj<NN>_m<MM>_tex<T>`: NN is the model's
+own object index (a body part, a weapon, a damage state), MM the mesh within it
+and T the texture slot it asks for.
 """
 import sys, os, glob, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -16,19 +20,21 @@ ENDIAN = {"dmc1": ">", "dmc2": "<"}
 def convert(path, outdir, endian):
     name = os.path.splitext(os.path.basename(path))[0]
     meshes = Reader(open(path, "rb").read(), endian).find_all()
-    # 3-vertex single-triangle hits are scan noise, not geometry
-    meshes = [m for m in meshes if m["nv"] >= 6 and len(m["tris"]) >= 2]
+    meshes = [m for m in meshes if m["tris"]]
     if not meshes:
         print("--   %-16s no meshes" % name)
         return 0
     os.makedirs(outdir, exist_ok=True)
     tv = tf = 0
     nl = []
+    seq = {}
     with open(os.path.join(outdir, name + ".obj"), "w") as f:
         f.write("# %s - Devil May Cry HD Collection (PS3)\n" % name)
         base = 0
-        for i, m in enumerate(meshes):
-            f.write("o %s_mesh%02d\n" % (name, i))
+        for m in meshes:
+            oi = m.get("obj", 0)
+            mi = seq[oi] = seq.get(oi, -1) + 1
+            f.write("o %s_obj%02d_m%02d_tex%d\n" % (name, oi, mi, m.get("tex", 0)))
             for p in m["pos"]:
                 f.write("v %.6f %.6f %.6f\n" % p)
             for u in m["uv"]:

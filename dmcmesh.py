@@ -1,21 +1,33 @@
 """Shared Pipeworks mesh reader for the DMC HD Collection (PS3).
 
-DMC1 (.pws / .pwd / .pld) is big-endian, DMC2 (MOMO .mdl) little-endian, but the
-geometry structures are identical:
+DMC1 (.pws / .pwd / .pld) is big-endian, DMC2 (MOMO .mdl / .mdz) little-endian,
+but the geometry structures are identical. A model file is a handful of
+sections; a geometry section owns a table of OBJECT records, and every object
+points at a run of MESH descriptors:
 
-  mesh record (stride 16)  u16 flags | u16 numVerts | u32 descOff | u32 | u32
-  descriptor               u16 numVerts | u16 ? | u32 pos | u32 nrm
-                           u32 uv | u32 bone | u32 weight
+  section header    u8 objectCount | 3 B | u32 | (u32)  -- 8 B in DMC1, 12 in DMC2
+  object record     u8 meshCount | u8 0 | u16 numVerts | u32 descOff  (stride 16)
+  mesh descriptor   u16 numVerts | u16 texIndex |
+                    u32 pos | u32 nrm | u32 uv | u32 bone | u32 weight (stride 32)
 
-Every offset is relative to `base`, the start of the header that owns the record
-table; the table itself begins 8 or 12 bytes into that header.
+Every offset is relative to `base`, the start of the section that owns the
+record table; the table itself begins 8 or 12 bytes into that section.
 
   arrays  pos/nrm 3xf32 | uv 2xi16/4096 with V flipped | bone 4 B | weight u16,
           bit 15 = triangle-strip break (the same convention as DMC3's MOD)
   0xcdcdcdcd is inter-block filler.
 
-Meshes are keyed by their position-array offset, so the header walk and the
-brute-force scan can be unioned without producing duplicates.
+An object's meshes share one array per attribute: all the positions sit back to
+back, then all the normals, and so on. That packing is what validates a
+candidate table - together with the object record's vertex total, which must
+equal the sum of its descriptors. Both are sharp enough that the section table
+never has to be located: every 4-aligned offset is tried as a record table and
+only real ones survive. `numVerts` in the object record is the object's total,
+not a mesh's, which is why reading it as a mesh vertex count (as this file used
+to) found only the objects that happen to hold a single mesh.
+
+Meshes are keyed by their position-array offset, so passes can be unioned
+without producing duplicates.
 """
 import struct
 
@@ -42,6 +54,10 @@ def get_tris(pos, nrm, skip, n):
 
 class Reader:
     def __init__(self, data, endian):
+        # a couple of files (DMC2 mclear.mdz) carry two junk bytes in front of
+        # the magic, which would throw every offset in the file out by two
+        if data[:4] != b"MOMO" and b"MOMO" in data[:16]:
+            data = data[data.index(b"MOMO"):]
         self.b = data
         self.e = endian                 # ">" for DMC1, "<" for DMC2
         self.N = len(data)
@@ -49,8 +65,114 @@ class Reader:
     def u(self, f, o):
         return struct.unpack_from(self.e + f, self.b, o)[0]
 
+    # ---- object-aware pass -------------------------------------------------
+
+    def _desc(self, base, d):
+        """Header half of a mesh descriptor: (numVerts, texIndex, arrays) or None."""
+        if d + 32 > self.N:
+            return None
+        nv, tex = struct.unpack_from(self.e + "HH", self.b, d)
+        if not (2 < nv < 65535):
+            return None
+        arr = [base + x for x in struct.unpack_from(self.e + "5I", self.b, d + 4)]
+        if not all(0 < x < self.N for x in arr):
+            return None
+        po, no, uo, bo, wo = arr
+        if (max(po, no) + nv*12 > self.N or uo + nv*4 > self.N
+                or bo + nv*4 > self.N or wo + nv*2 > self.N):
+            return None
+        return nv, tex, arr
+
+    def _read(self, nv, tex, arr):
+        """Read one descriptor's vertex data, or None if it isn't vertex data."""
+        b, e = self.b, self.e
+        po, no, uo, bo, wo = arr
+        pos = [struct.unpack_from(e + "3f", b, po + 12*k) for k in range(nv)]
+        if not all(-1e5 < c < 1e5 for p in pos for c in p):
+            return None
+        nrm = [struct.unpack_from(e + "3f", b, no + 12*k) for k in range(nv)]
+        if not all(-2.0 < c < 2.0 for n in nrm for c in n):
+            return None
+        uv = [(self.u("h", uo + 4*k) / 4096., 1. - self.u("h", uo + 4*k + 2) / 4096.)
+              for k in range(nv)]
+        skip = [(self.u("H", wo + 2*k) >> 15) & 1 for k in range(nv)]
+        return dict(po=po, nv=nv, tex=tex, pos=pos, nrm=nrm, uv=uv,
+                    tris=get_tris(pos, nrm, skip, nv))
+
+    def obj(self, base, r):
+        """Parse the object record at `r`, offsets relative to `base`.
+
+        Returns its list of meshes, or None if `r` is not an object record.
+        """
+        if r + 16 > self.N or base < 0:
+            return None
+        mc, pad = self.b[r], self.b[r + 1]
+        tv, doff = struct.unpack_from(self.e + "HI", self.b, r + 2)
+        if pad or not (0 < mc <= 64) or not (2 < tv < 200000):
+            return None
+        if not (0 < base + doff < self.N):
+            return None
+        heads = []
+        for i in range(mc):
+            h = self._desc(base, base + doff + 32*i)
+            if h is None:
+                return None
+            heads.append(h)
+        # the record's total is the sum of its meshes - the cheapest and
+        # sharpest test that this really is an object record
+        if sum(h[0] for h in heads) != tv:
+            return None
+        # and one attribute's arrays are packed back to back across the object's
+        # meshes, padded up to 16 (an already aligned array still gets 16 B)
+        for k, w in ((0, 12), (1, 12), (2, 4), (3, 4), (4, 2)):
+            for i in range(mc - 1):
+                gap = heads[i+1][2][k] - heads[i][2][k]
+                if not (heads[i][0]*w <= gap <= (heads[i][0]*w + 15)//16*16 + 16):
+                    return None
+        meshes = []
+        for nv, tex, arr in heads:
+            m = self._read(nv, tex, arr)
+            if m is None:
+                return None
+            meshes.append(m)
+        return meshes
+
+    def scan_objects(self):
+        """Try every 4-aligned offset as the start of an object-record table."""
+        b, found, r = self.b, {}, 0
+        while r < self.N - 16:
+            # cheap reject first: the file is mostly not object records, and
+            # every one of them starts with a small mesh count and a zero byte
+            if not (0 < b[r] <= 64) or b[r + 1]:
+                r += 4
+                continue
+            hit = 0
+            for back in (8, 12):            # DMC1 and DMC2 section headers
+                base, rr, objs = r - back, r, []
+                while len(objs) < 256:
+                    o = self.obj(base, rr)
+                    if o is None:
+                        break
+                    objs.append(o)
+                    rr += 16
+                if objs:
+                    for oi, o in enumerate(objs):
+                        for m in o:
+                            m["obj"] = oi
+                            found.setdefault(m["po"], m)
+                    hit = len(objs)
+                    break
+            r += hit * 16 if hit else 4
+        return found
+
+    # ---- legacy single-record pass -----------------------------------------
+
     def mesh(self, base, r):
-        """Parse the mesh record at `r` with offsets relative to `base`."""
+        """Parse a lone mesh record at `r` - the pre-object-table reading.
+
+        Kept as a fallback for files the object pass finds nothing in: it asks
+        much less of the data, at the price of accepting some noise.
+        """
         b, N, e = self.b, self.N, self.e
         if r + 16 > N or base < 0:
             return None
@@ -63,9 +185,7 @@ class Reader:
         po, no, uo, bo, wo = (base + x for x in struct.unpack_from(e + "5I", b, d + 4))
         if not all(0 < x < N for x in (po, no, uo, wo)):
             return None
-        # The descriptor's leading u16 echoes numVerts in most files but not all,
-        # so validate on array spacing instead. Arrays are padded up to 16, and
-        # an already-aligned array still gets a full 16 bytes of 0xcd filler.
+        # here a mesh stands alone, so its own arrays must be adjacent
         def spaced(lo, hi, w):
             return nv * w <= hi - lo <= (nv * w + 15) // 16 * 16 + 16
         if not (spaced(po, no, 12) and spaced(no, uo, 12)
@@ -73,17 +193,10 @@ class Reader:
             return None
         if max(po, no) + nv*12 > N or uo + nv*4 > N or wo + nv*2 > N:
             return None
-        pos = [struct.unpack_from(e + "3f", b, po + 12*k) for k in range(nv)]
-        if not all(-1e5 < c < 1e5 for p in pos for c in p):
-            return None
-        nrm = [struct.unpack_from(e + "3f", b, no + 12*k) for k in range(nv)]
-        if not all(-2.0 < c < 2.0 for n in nrm for c in n):
-            return None
-        uv = [(self.u("h", uo + 4*k) / 4096., 1. - self.u("h", uo + 4*k + 2) / 4096.)
-              for k in range(nv)]
-        skip = [(self.u("H", wo + 2*k) >> 15) & 1 for k in range(nv)]
-        return dict(po=po, nv=nv, pos=pos, nrm=nrm, uv=uv,
-                    tris=get_tris(pos, nrm, skip, nv))
+        m = self._read(nv, 0, (po, no, uo, bo, wo))
+        if m is not None:
+            m["obj"] = 0
+        return m
 
     def _run(self, base, r, into):
         """Read consecutive records from `r` until one fails. Returns how many."""
@@ -117,11 +230,13 @@ class Reader:
         return found
 
     def find_all(self):
-        """Union of both passes, keyed by position offset.
+        """Every mesh in the file, ordered by position offset.
 
-        Neither pass subsumes the other: they skip forward differently after a
-        run, so a table one lands on mid-way the other can land on squarely.
+        The object pass is the one that reads the format; the loose pass only
+        runs when it comes up empty, so its noise never dilutes a good read.
         """
-        found = self.scan(strict=False)
-        found.update(self.scan(strict=True))
+        found = self.scan_objects()
+        if not found:
+            found = self.scan(strict=False)
+            found.update(self.scan(strict=True))
         return [found[k] for k in sorted(found)]

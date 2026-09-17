@@ -4,6 +4,15 @@ Identified from geometry, not from guesswork about filenames: every one of the
 233 OBJs was measured with `classify.py` and rendered with `contactsheet.py`,
 then read off the sheets in `out/sheets/`.
 
+> **This covers the first extraction pass.** The extractor now reads the object
+> tables properly and also pulls DMC2 and DMC3 players, enemies and props — 741
+> OBJs in total (see the README). The identifications below still hold: the DMC1
+> weapons, the DMC3 weapon PACs and the DMC2 characters are the same files, with
+> `DMC2_models/` now split into `DMC2_players/` and `DMC2_enemies/`, and the
+> character files carrying more meshes each than they did here. Everything added
+> since — DMC1 `.fsd` props, DMC2 `sobj_*` props, DMC3 `PL*`/`EM*` — has not been
+> named model by model.
+
 Confidence is marked: **certain** (the silhouette is unmistakable),
 *likely* (shape and slot both fit, no contradicting evidence), and
 `unresolved` (needs someone who knows the game to look).
@@ -17,8 +26,8 @@ Confidence is marked: **certain** (the silhouette is unmistakable),
 | `DMC1_weapons/pw01`-`pw0a` | 10 | **all ten DMC1 weapons**, one per file |
 | `DMC3_weapons/PLWP_*_PAC_0N.obj` (short names) | 25 | **DMC3 weapon meshes**, split into parts |
 | `DMC3_weapons/PLWP_*_PAC_0N_01_NNN.obj` (long names) | 96 | **not weapons** — a shared VFX library |
-| `DMC2_models/pl*_gm` | 8 | weapons are **sub-meshes inside** the player models |
-| `DMC1_players`, `DMC1_enemies`, `DMC2_models/em*` | 94 | characters, not weapons |
+| `DMC2_players/pl*_gm` | 8 | weapons are **sub-meshes inside** the player models |
+| `DMC1_players`, `DMC1_enemies`, `DMC2_enemies` | 94 | characters, not weapons |
 
 ---
 
@@ -198,5 +207,5 @@ Nothing in any weapon file is a placeholder.
 ```powershell
 python classify.py --csv mesh_report.csv          # measure all 233, list the primitives
 blender -b -P contactsheet.py -- sheet.png out/DMC1_weapons
-blender -b -P contactsheet.py -- parts.png --submesh out/DMC2_models/pl00_gm.obj
+blender -b -P contactsheet.py -- parts.png --submesh out/DMC2_players/pl00_gm.obj
 ```

@@ -3,9 +3,10 @@
 Both magics are the same big-endian structure:
     magic 'PAC\\0' or 'PNST' | u32 count @4 | u32 offset table @8
 An entry ends where the next begins. Containers nest, so this recurses.
-PLWP_*.PAC files are really PNST containers holding 'MOD ' meshes.
+The model archives are really PNST containers holding 'MOD ' meshes:
+PLWP_*.PAC (weapons), PL???.PAC (players) and EM???.PAC (enemies).
 
-    python unpack_all.py [<GDATA.AFS dir>] [<output dir>]
+    python unpack_all.py [<GDATA.AFS dir>] [<output dir>] [<pattern>]
 
 Defaults match the layout dmcextract.py builds.
 """
@@ -61,10 +62,10 @@ def walk(b, outdir, found, depth=0, tag="root", quiet=False):
                 print(f"{pad}  [{i:02d}] size={len(sub):>8} '{am}' -> {fn}{note}")
 
 
-def unpack_dir(afs_dir, outdir, quiet=True):
-    """Unpack every PLWP_*.PAC in afs_dir. Returns the list of .mod files."""
+def unpack_dir(afs_dir, outdir, quiet=True, pattern="PLWP_*.PAC"):
+    """Unpack every archive matching `pattern`. Returns the list of .mod files."""
     found = []
-    for path in sorted(glob.glob(os.path.join(afs_dir, "PLWP_*.PAC"))):
+    for path in sorted(glob.glob(os.path.join(afs_dir, pattern))):
         name = os.path.basename(path)
         with open(path, 'rb') as f:
             b = f.read()
@@ -75,7 +76,8 @@ def unpack_dir(afs_dir, outdir, quiet=True):
 if __name__ == "__main__":
     afs = sys.argv[1] if len(sys.argv) > 1 else r"isoextract\PS3_GAME\USRDIR\GDATA.AFS"
     out = sys.argv[2] if len(sys.argv) > 2 else "unpacked"
-    mods = unpack_dir(afs, out, quiet=False)
+    pat = sys.argv[3] if len(sys.argv) > 3 else "PLWP_*.PAC"
+    mods = unpack_dir(afs, out, quiet=False, pattern=pat)
     print("MOD files found:", len(mods))
     for f in mods:
         print("  ", f, os.path.getsize(f))

@@ -5,11 +5,13 @@ as `.obj` files you can open in Blender.
 
 You drop your disc image into the `iso/` folder and run **one command**.
 
-| Game | What you get | Count |
-|---|---|---|
-| DMC1 | weapons, players, enemies | 10 + 5 + 49 |
-| DMC2 | players, enemies (weapons are parts of the player models) | 48 |
-| DMC3 | weapons | 121 |
+| Game | weapons | players | enemies | props |
+|---|---|---|---|---|
+| DMC1 | 10 | 5 | 58 | 99 |
+| DMC2 | *(inside the players)* | 8 | 51 | 26 |
+| DMC3 | 121 | 48 | 315 | *(format not read)* |
+
+**741 OBJ files in all.**
 
 The file formats are undocumented — no public spec, and no Noesis or Blender
 plugin exists for DMC1/DMC2. They were reverse-engineered for this repo. Format
@@ -55,7 +57,7 @@ get you any.
 
 ### Disk space
 
-About **5 GB** free, on top of the ISO itself.
+About **6 GB** free, on top of the ISO itself.
 
 ### Optional
 
@@ -95,38 +97,55 @@ resolved relative to the script.
 ISO:   ...\iso\Devil May Cry - HD Collection (USA) ....iso
 7-Zip: C:\Program Files\7-Zip\7z.exe
 
-[1/4] Reading the ISO (this takes a few minutes, ~4.2 GB)
+[1/4] Reading the ISO (this takes a few minutes, ~4.6 GB)
 [2/4] Unpacking the DMC1 and DMC2 bundles
 [3/4] Converting DMC1 and DMC2 to OBJ
 OK   pw08             meshes=  3 verts=   376 tris=   236 nrmlen=1.0000
 ...
-[4/4] Unpacking and converting DMC3 weapons
+[4/4] Unpacking and converting DMC3
 
 Done. OBJ files written to ...\out:
-   DMC1_enemies       49
+   DMC1_enemies       58
    DMC1_players        5
+   DMC1_props         99
    DMC1_weapons       10
-   DMC2_models        48
+   DMC2_enemies       51
+   DMC2_players        8
+   DMC2_props         26
+   DMC3_enemies      315
+   DMC3_players       48
    DMC3_weapons      121
 ```
 
-The first run takes a few minutes. **Running it again is safe** — it skips the
+The first run takes around twenty minutes, most of it reading the ISO. **Running it again is safe** — it skips the
 slow ISO step and reuses what it already extracted.
 
 ### Where your models are
 
 ```
 out/
-├── DMC1_weapons/     pw01.obj ... pw0a.obj      <- all 10 DMC1 weapons
-├── DMC1_players/     pl00.obj ...
-├── DMC1_enemies/     em00.obj ...
-├── DMC2_models/      pl00_gm.obj, em00_gm.obj ...
-└── DMC3_weapons/     PLWP_SHOTGUN_PAC_01.obj ...
+├── DMC1_weapons/     pw01.obj ... pw0a.obj          <- all 10 DMC1 weapons
+├── DMC1_players/     pl00.obj ...                   <- Dante and the other players
+├── DMC1_enemies/     em00.obj ...                   <- every enemy
+├── DMC1_props/       r11b.obj ...                   <- one file per room (`.fsd`)
+├── DMC2_players/     pl00_gm.obj ...                <- Dante, Lucia, their weapons
+├── DMC2_enemies/     em00_gm.obj ...
+├── DMC2_props/       sobj_10.obj ...                <- stage objects
+├── DMC3_weapons/     PLWP_SHOTGUN_PAC_01.obj ...
+├── DMC3_players/     PL000_PAC_01.obj ...           <- Dante, Vergil, Lady, NPCs
+└── DMC3_enemies/     EM000_PAC_01.obj ...
 ```
 
+Every mesh is one OBJ group named `obj<NN>_m<MM>_tex<T>`: `NN` is the model's
+own object index — a body part, a held weapon, a damage state — `MM` the mesh
+within it, and `T` the texture slot it asks for. Hide and show them in Blender's
+outliner to pull a model apart.
+
 > ✅ **`nrmlen=1.0000` in the output is your proof it worked.** That's the
-> average length of the surface normals. Geometry read correctly always gives
-> exactly 1.0000. Anything else means the file was misread.
+> average length of the surface normals. Geometry read correctly gives 1.0000;
+> 716 of the 741 files are exact. A dozen land between 0.92 and 0.99 — PS2-era
+> normals that were quantised slightly short, not a misread. Anything far off
+> that would mean the file was read wrong.
 
 ### If the `iso/` folder is empty
 
@@ -148,7 +167,7 @@ folder and run this again. Nothing was changed.
 | Folder | What it is | Safe to delete? |
 |---|---|---|
 | `iso/` | where **you** put your disc image | it's your file |
-| `build/` | intermediate files pulled from the ISO (~4.4 GB) | yes — regenerated on the next run |
+| `build/` | intermediate files pulled from the ISO (~5.3 GB) | yes — regenerated on the next run |
 | `out/` | **your finished `.obj` models** | that's the product, keep it |
 
 `build/` and `out/` are in `.gitignore`, so they are never committed. Delete
@@ -158,7 +177,8 @@ folder and run this again. Nothing was changed.
 
 ## 4. Which model is which weapon
 
-**[`WEAPON_LABELS.md`](WEAPON_LABELS.md) identifies all 233 files** — every
+**[`WEAPON_LABELS.md`](WEAPON_LABELS.md) identifies the 233 files of the first
+pass** (DMC1 weapons/players/enemies, DMC2 characters, DMC3 weapons) — every
 DMC1 weapon by name, every DMC3 PAC checked against its geometry, and the DMC2
 weapons located inside the player models. Two things worth knowing up front:
 
@@ -186,7 +206,7 @@ needs Blender:
 
 ```powershell
 blender -b -P contactsheet.py -- sheet.png out/DMC1_weapons
-blender -b -P contactsheet.py -- parts.png --submesh out/DMC2_models/pl00_gm.obj
+blender -b -P contactsheet.py -- parts.png --submesh out/DMC2_players/pl00_gm.obj
 ```
 
 The sheets behind `WEAPON_LABELS.md` are in `out/sheets/`.
@@ -206,7 +226,7 @@ picking apart single files or poking at the formats.
 | `bdp.py` | `python bdp.py <file.BDP>` | prints what's inside a bundle; extracts nothing |
 | `extract.py` | `python extract.py [<bundles dir>] [<out dir>]` | bundle → individual game files |
 | `dmc2obj.py` | `python dmc2obj.py <game> <pattern>... <outdir>` | DMC1/DMC2 files → OBJ |
-| `unpack_all.py` | `python unpack_all.py [<GDATA.AFS dir>] [<out dir>]` | DMC3 `.PAC` → `.mod` |
+| `unpack_all.py` | `python unpack_all.py [<GDATA.AFS dir>] [<out dir>] [<pattern>]` | DMC3 `.PAC` → `.mod` (pattern defaults to `PLWP_*.PAC`; use `EM???.PAC` or `PL???.PAC` for the characters) |
 | `modbe2.py` | `python modbe2.py [<unpacked dir>] [<out dir>]` | DMC3 `.mod` → OBJ |
 | `dmcmesh.py` | not run directly | shared mesh reader used by `dmc2obj.py` |
 
@@ -259,10 +279,11 @@ $env:PYTHONIOENCODING = "utf-8"
 ```
 
 **An OBJ opens but looks like a scrambled pile of parts**
-Expected for **DMC2 character models**. Their meshes are stored in bone-local
-space — each body part sits at its own origin, and the skeleton has not been
-reverse-engineered, so they cannot be assembled automatically. Move the parts by
-hand in Blender. DMC1 weapons and players do not have this problem.
+Expected for **character models** in all three games. Their meshes are stored in
+bone-local space — each body part sits at its own origin, and the skeleton has
+not been reverse-engineered, so they cannot be assembled automatically. Move the
+parts by hand in Blender; the `obj<NN>` group names tell you what belongs
+together. DMC1 weapons and props do not have this problem.
 
 **`ModuleNotFoundError: No module named 'dmcmesh'`**
 The `.py` files were separated. Keep them all in one folder.
@@ -279,8 +300,23 @@ The `.py` files were separated. Keep them all in one folder.
 - **DMC2 has no separate weapon files.** Dante's and Lucia's weapons are
   sub-meshes inside `pl*_gm.obj` — `pl00_gm` holds his coat and the Rebellion
   blade. Open it in Blender and pick the parts you want.
-- **Mesh discovery is a validated brute-force scan**, so a file may yield a
-  couple of meshes more or less than the game actually loads.
+- **Mesh discovery is a validated brute-force scan.** It reads the real object
+  tables rather than guessing, and every candidate has to survive the vertex
+  total and the array packing, so what comes out is geometry the game ships —
+  but a file may still yield a mesh or two more or less than it loads at once
+  (LODs, damage states and unused objects all live in the same file).
+- **Props are what the stage files hold, not a curated list.** DMC1 `.fsd` rooms
+  and DMC2 `sobj_*.bin` carry gates, platforms, rings, panels and rigging along
+  with flat effect quads. Run `classify.py` over `out/DMC1_props` to separate
+  the shaped objects from the billboards.
+- **DMC3 has no props here.** Its stage and item archives (`ST*.PAC`, `ID*.PAC`)
+  hold `SCM ` scenes and `ipum` images, not the `MOD ` meshes the characters and
+  weapons use, and neither format has been read yet.
+- **DMC2 stage geometry is out too.** `st*_*.bin` is MOMO with the same object
+  records but a 16-byte mesh descriptor whose arrays are implied rather than
+  pointed at — a different variant, not yet reversed. Only `sobj_*` props parse.
+- **DMC3 costume PACs are skipped.** `PL???_??_?.PAC` carry no geometry of their
+  own, so the extractor leaves them on the disc.
 - These are PS2-era models — 200–750 vertices for a weapon. They are reference
   geometry, not modern drop-in assets.
 
