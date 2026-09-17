@@ -156,25 +156,40 @@ folder and run this again. Nothing was changed.
 
 ---
 
-## 4. The DMC1 weapons
+## 4. Which model is which weapon
 
-All ten. The names are educated guesses from the shape and size of each model —
-check them against the game before relying on them.
+**[`WEAPON_LABELS.md`](WEAPON_LABELS.md) identifies all 233 files** — every
+DMC1 weapon by name, every DMC3 PAC checked against its geometry, and the DMC2
+weapons located inside the player models. Two things worth knowing up front:
 
-| File | Verts / Tris | Looks like |
-|---|---|---|
-| `pw01.obj` | 284 / 156 | handgun (Ebony / Ivory) |
-| `pw02.obj` | 618 / 297 | slim long-barrelled gun |
-| `pw03.obj` | 592 / 365 | shotgun |
-| `pw04.obj` | 401 / 308 | compact launcher |
-| `pw05.obj` | 634 / 359 | large gun (Nightmare-β / Needlegun) |
-| `pw06.obj` | 702 / 432 | straight broadsword (Force Edge) |
-| `pw07.obj` | 528 / 362 | winged-guard sword (Alastor) |
-| `pw08.obj` | 376 / 236 | wide bat-wing guard (Sparda) |
-| `pw09.obj` | 679 / 481 | curved blade |
-| `pw0a.obj` | 346 / 251 | thin katana (Yamato) |
+- **Only 35 of the 233 files are weapons.** The 96 long-named DMC3 files
+  (`PLWP_*_PAC_0N_01_NNN.obj`) are a shared effects library — slash arcs,
+  shockwave rings, billboard quads, glow spheres — which is why so many of them
+  look like Blender primitives. They are meaningless without their textures.
+- **Four DMC3 PACs ship duplicate mesh payloads.** That is in Capcom's data,
+  not a bug here; `GRENADE_PAC` in particular holds Rebellion, not Kalina Ann.
 
-Five compact plus five long-bladed matches DMC1's five guns and five melee weapons.
+### Checking it yourself
+
+`classify.py` measures every mesh and prints the ones that are geometrically a
+disc, quad, plane, box, tube or sphere, plus a report of shapes shared between
+files (which is how Force Edge and Sparda were confirmed to use the same grip):
+
+```powershell
+python classify.py                       # all of out/
+python classify.py --csv report.csv out/DMC1_weapons
+```
+
+`contactsheet.py` renders many models onto one labelled page, each normalised
+to its most readable silhouette, so you can identify a folder at a glance. It
+needs Blender:
+
+```powershell
+blender -b -P contactsheet.py -- sheet.png out/DMC1_weapons
+blender -b -P contactsheet.py -- parts.png --submesh out/DMC2_models/pl00_gm.obj
+```
+
+The sheets behind `WEAPON_LABELS.md` are in `out/sheets/`.
 
 ---
 
@@ -186,6 +201,8 @@ picking apart single files or poking at the formats.
 | Script | How you run it | What it does |
 |---|---|---|
 | `dmcextract.py` | `python dmcextract.py` | **the whole pipeline** — start here |
+| `classify.py` | `python classify.py` | measures every OBJ and flags the ones that are primitives rather than art |
+| `contactsheet.py` | `blender -b -P contactsheet.py -- sheet.png out/DMC1_weapons` | renders a labelled sheet of many models at once |
 | `bdp.py` | `python bdp.py <file.BDP>` | prints what's inside a bundle; extracts nothing |
 | `extract.py` | `python extract.py [<bundles dir>] [<out dir>]` | bundle → individual game files |
 | `dmc2obj.py` | `python dmc2obj.py <game> <pattern>... <outdir>` | DMC1/DMC2 files → OBJ |
