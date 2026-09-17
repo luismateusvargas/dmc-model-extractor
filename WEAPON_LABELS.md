@@ -39,9 +39,9 @@ A clean 5 guns + 5 melee split, in ID order.
 |---|---|---|---|
 | `pw01` | 156 x 87 x 15 | **Ebony & Ivory** — an M1911 with the extended slide | certain |
 | `pw02` | 325 x 74 x 43 | **Shotgun** — break-action, swept pistol grip, long barrel | certain |
-| `pw03` | 488 x 170 x 123 | Grenadegun *or* Needlegun — stock, foregrip loop, box receiver | `unresolved` |
+| `pw03` | 488 x 170 x 123 | **Grenadegun** — stock, foregrip loop, box receiver | certain |
 | `pw04` | 279 x 114 x 83 | **Nightmare-β** — the only organic, spiked, non-manufactured shape | certain |
-| `pw05` | 497 x 269 x 147 | Grenadegun *or* Needlegun — stubby launcher, projectile visible in a square muzzle frame | `unresolved` |
+| `pw05` | 497 x 269 x 147 | **Needlegun** — stubby body, projectile visible in a square muzzle frame | certain |
 | `pw06` | 775 x 202 x 76 | **Force Edge** — straight blade, ornate winged guard | certain |
 | `pw07` | 995 x 228 x 30 | **Alastor** — broad swept single-edged blade, bat-wing guard | certain |
 | `pw08` | 954 x 561 x 50 | **Sparda** — the huge jagged bat-wing guard | certain |
@@ -60,8 +60,9 @@ report:
 - `pw09` contains `pw0a` whole. Two files, one weapon inside the other.
 - `pw06` and `pw09` share a 29-vert pommel.
 
-To resolve `pw03` vs `pw05`, the question is only which of the two is the
-Grenadegun: `pw05` has what looks like a round in a square muzzle frame.
+`pw03` and `pw05` were the last pair left open — the silhouettes alone could
+not say which was the Grenadegun. They are settled now: **`pw03` is the
+Grenadegun and `pw05` is the Needlegun.**
 
 ## 3. DMC3 — `out/DMC3_weapons/`, short-named files (sheet: `sheet_dmc3_weapons.png`)
 

@@ -1,7 +1,7 @@
 # DMC Model Extractor
 
 Pulls the 3D models out of **Devil May Cry HD Collection (PS3)** and writes them
-as `.obj` files you can open in Blender.
+as textured `.obj` files you can open in Blender.
 
 You drop your disc image into the `iso/` folder and run **one command**.
 
@@ -11,11 +11,13 @@ You drop your disc image into the `iso/` folder and run **one command**.
 | DMC2 | *(inside the players)* | 8 | 51 | 26 |
 | DMC3 | 121 | 48 | 315 | *(format not read)* |
 
-**741 OBJ files in all.**
+**741 OBJ files in all**, with **1,756 PNG textures** — 737 of the 741 open
+already textured.
 
 The file formats are undocumented — no public spec, and no Noesis or Blender
 plugin exists for DMC1/DMC2. They were reverse-engineered for this repo. Format
-notes are in the comments at the top of `bdp.py`, `dmcmesh.py` and `modbe2.py`.
+notes are in the comments at the top of `bdp.py`, `dmcmesh.py`, `modbe2.py` and
+`dmctex.py` — the last one covers all three games' texture containers.
 
 ---
 
@@ -100,21 +102,21 @@ ISO:   ...\iso\Devil May Cry - HD Collection (USA) ....iso
 [1/4] Reading the ISO (this takes a few minutes, ~4.6 GB)
 [2/4] Unpacking the DMC1 and DMC2 bundles
 [3/4] Converting DMC1 and DMC2 to OBJ
-OK   pw08             meshes=  3 verts=   376 tris=   236 nrmlen=1.0000
+OK   pw08             meshes=  3 verts=   376 tris=   236 nrmlen=1.0000 tex=1
 ...
 [4/4] Unpacking and converting DMC3
 
 Done. OBJ files written to ...\out:
-   DMC1_enemies       58
-   DMC1_players        5
-   DMC1_props         99
-   DMC1_weapons       10
-   DMC2_enemies       51
-   DMC2_players        8
-   DMC2_props         26
-   DMC3_enemies      315
-   DMC3_players       48
-   DMC3_weapons      121
+   DMC1_enemies       58 obj    269 png
+   DMC1_players        5 obj     21 png
+   DMC1_props         99 obj    292 png
+   DMC1_weapons       10 obj     10 png
+   DMC2_enemies       51 obj    282 png
+   DMC2_players        8 obj    185 png
+   DMC2_props         26 obj    181 png
+   DMC3_enemies      315 obj    335 png
+   DMC3_players       48 obj     60 png
+   DMC3_weapons      121 obj    121 png
 ```
 
 The first run takes around twenty minutes, most of it reading the ISO. **Running it again is safe** — it skips the
@@ -136,10 +138,30 @@ out/
 └── DMC3_enemies/     EM000_PAC_01.obj ...
 ```
 
+Each folder also holds a `.mtl` per model and a `textures/` subfolder of PNGs:
+
+```
+out/DMC1_weapons/
+├── pw02.obj
+├── pw02.mtl
+└── textures/
+    └── pw02_tex0.png
+```
+
+**Just open the `.obj`** — Blender reads the `.mtl` and the PNGs beside it, and
+the model comes in textured. Nothing to point at by hand. The textures keep
+their alpha, which the games use for cut-outs (hair, coat trims, foliage), so
+the material sets each one as both the colour and the opacity map.
+
 Every mesh is one OBJ group named `obj<NN>_m<MM>_tex<T>`: `NN` is the model's
 own object index — a body part, a held weapon, a damage state — `MM` the mesh
 within it, and `T` the texture slot it asks for. Hide and show them in Blender's
 outliner to pull a model apart.
+
+A PNG is named after the slot that uses it (`pw02_tex0.png`). Where one file
+carries several independent texture sets — a DMC2 character file is a dozen
+submodels in a row, each numbering its slots from zero again — the set number
+goes in too: `pl00_gm_s03_tex1.png`.
 
 > ✅ **`nrmlen=1.0000` in the output is your proof it worked.** That's the
 > average length of the surface normals. Geometry read correctly gives 1.0000;
@@ -229,6 +251,7 @@ picking apart single files or poking at the formats.
 | `unpack_all.py` | `python unpack_all.py [<GDATA.AFS dir>] [<out dir>] [<pattern>]` | DMC3 `.PAC` → `.mod` (pattern defaults to `PLWP_*.PAC`; use `EM???.PAC` or `PL???.PAC` for the characters) |
 | `modbe2.py` | `python modbe2.py [<unpacked dir>] [<out dir>]` | DMC3 `.mod` → OBJ |
 | `dmcmesh.py` | not run directly | shared mesh reader used by `dmc2obj.py` |
+| `dmctex.py` | not run directly | shared texture reader � all three games' formats, and the PNG writer |
 
 ### `dmc2obj.py` arguments
 
@@ -250,7 +273,8 @@ python dmc2obj.py dmc1 "build/extract/DMC1/data/pld/*.pws" myweapons
 
 ### Keeping the files together
 
-`dmc2obj.py` imports `dmcmesh.py`, and `extract.py` imports `bdp.py`. **Keep all
+`dmc2obj.py` imports `dmcmesh.py` and `dmctex.py`, `modbe2.py` and
+`unpack_all.py` import `dmctex.py`, and `extract.py` imports `bdp.py`. **Keep all
 the `.py` files in one folder** or those imports fail.
 
 ---

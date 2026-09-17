@@ -9,7 +9,8 @@ If no .iso is there, this does nothing and says so. Nothing else is required.
 
 Everything is resolved relative to this file, so it does not matter which folder
 you run it from. Intermediate files land in `build/`, finished models in `out/`,
-one folder per game and category (players, enemies, weapons, props).
+one folder per game and category (players, enemies, weapons, props). Each OBJ
+comes with its .mtl and a `textures/` folder of PNGs, so it opens textured.
 """
 import os
 import sys
@@ -90,6 +91,9 @@ def convert_all(pattern, game, outdir):
 def dmc3(afs, name, pattern, outdir):
     """Unpack one family of DMC3 archives and convert every MOD inside."""
     unpacked = os.path.join(BUILD, "unpacked", name)
+    # a re-run over a stale directory would leave the previous unpack's files
+    # behind, and a texture block saved as .bin by an older version with it
+    shutil.rmtree(unpacked, ignore_errors=True)
     mods = unpack_all.unpack_dir(afs, unpacked, pattern=pattern)
     print("   %s: %d MOD meshes found" % (name, len(mods)))
     return modbe2.convert_dir(unpacked, outdir)
@@ -171,7 +175,8 @@ def main():
 
     print("\nDone. OBJ files written to %s:" % OUT)
     for name in sorted(totals):
-        print("   %-16s %4d" % (name, totals[name]))
+        png = len(glob.glob(os.path.join(OUT, name, "textures", "*.png")))
+        print("   %-16s %4d obj  %5d png" % (name, totals[name], png))
     return 0
 
 

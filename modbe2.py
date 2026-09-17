@@ -20,6 +20,9 @@ import sys
 import glob
 import math
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dmctex
+
 
 def be(fmt, b, o):
     return struct.unpack_from('>' + fmt, b, o)[0]
@@ -83,10 +86,46 @@ def parse(path):
     return oc, bc, meshes
 
 
+def textures_for(mod_path, root, cache):
+    """The texture block a .mod indexes into.
+
+    unpack_all writes each container's textures as a .tex beside the meshes
+    that use them, and the file names are the container's entry numbers, so a
+    mesh's own textures are the entry right after it. That is how the effects
+    groups are laid out - 43.mod then 44.tex, 45.mod then 46.tex - while a
+    model PAC keeps one 00.tex for everything below it. So: the next entry
+    first, then any .tex in the same folder, then the same search one level up.
+
+    Decoded blocks are cached; decoding is much slower than reading.
+    """
+    d = os.path.dirname(os.path.abspath(mod_path))
+    root = os.path.abspath(root)
+    entry = os.path.splitext(os.path.basename(mod_path))[0]
+
+    def load(path):
+        if path not in cache:
+            with open(path, 'rb') as f:
+                cache[path] = dmctex.dmc3_textures(f.read())
+        return cache[path]
+
+    while True:
+        if entry.isdigit():
+            nxt = os.path.join(d, "%02d.tex" % (int(entry) + 1))
+            if os.path.exists(nxt):
+                return load(nxt)
+        tex = sorted(glob.glob(os.path.join(d, "*.tex")))
+        if tex:
+            return load(tex[0])
+        if d == root or os.path.dirname(d) == d:
+            return []
+        d, entry = os.path.dirname(d), os.path.basename(d)
+
+
 def convert_dir(unpacked, outdir):
     """Convert every .mod under `unpacked`. Returns how many OBJ files were written."""
     os.makedirs(outdir, exist_ok=True)
     tot = 0
+    cache = {}
     for mp in sorted(glob.glob(os.path.join(unpacked, "**", "*.mod"), recursive=True)):
         r = parse(mp)
         if not r:
@@ -96,13 +135,23 @@ def convert_dir(unpacked, outdir):
         if not meshes:
             print("--   %-42s objs=%d no meshes" % (name, oc))
             continue
+        # one texture list per file, so the container index is always 0
+        images = textures_for(mp, unpacked, cache)
+        used = {(0, t[2]) for t in meshes if 0 <= t[2] < len(images)}
+        mtls = dmctex.save([(0, images)], outdir, name, used)
+        if mtls:
+            dmctex.write_mtl(os.path.join(outdir, name + ".mtl"), name, mtls)
         tv = sum(len(m[3]) for m in meshes)
         tf = sum(len(m[6]) for m in meshes)
         nl = [math.sqrt(sum(c*c for c in n)) for m in meshes for n in m[4][:50]]
         with open(os.path.join(outdir, name + ".obj"), 'w') as f:
+            if mtls:
+                f.write("mtllib %s.mtl\n" % name)
             base = 0
             for oi, mi, tex, pos, nrm, uv, tris in meshes:
                 f.write("o o%d_m%d_tex%d\n" % (oi, mi, tex))
+                if (0, tex) in mtls:
+                    f.write("usemtl %s\n" % mtls[(0, tex)])
                 for p in pos:
                     f.write("v %.6f %.6f %.6f\n" % p)
                 for u in uv:
@@ -115,8 +164,8 @@ def convert_dir(unpacked, outdir):
                 base += len(pos)
         tot += 1
         # unit-length normals are the signal the arrays were read correctly
-        print("OK   %-42s meshes=%2d verts=%6d tris=%6d nrmlen=%.4f" %
-              (name, len(meshes), tv, tf, sum(nl) / len(nl) if nl else 0))
+        print("OK   %-42s meshes=%2d verts=%6d tris=%6d nrmlen=%.4f tex=%d" %
+              (name, len(meshes), tv, tf, sum(nl) / len(nl) if nl else 0, len(mtls)))
     return tot
 
 
