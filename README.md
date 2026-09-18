@@ -207,7 +207,8 @@ weapons located inside the player models. Two things worth knowing up front:
 - **Only 35 of the 233 files are weapons.** The 96 long-named DMC3 files
   (`PLWP_*_PAC_0N_01_NNN.obj`) are a shared effects library — slash arcs,
   shockwave rings, billboard quads, glow spheres — which is why so many of them
-  look like Blender primitives. They are meaningless without their textures.
+  look like Blender primitives. Their textures are extracted too, which is what
+  makes them readable: the geometry is just the quad the effect is painted on.
 - **Four DMC3 PACs ship duplicate mesh payloads.** That is in Capcom's data,
   not a bug here; `GRENADE_PAC` in particular holds Rebellion, not Kalina Ann.
 
@@ -232,6 +233,37 @@ blender -b -P contactsheet.py -- parts.png --submesh out/DMC2_players/pl00_gm.ob
 ```
 
 The sheets behind `WEAPON_LABELS.md` are in `out/sheets/`.
+
+### How the textures were read
+
+Each game keeps its images in the model file itself, in its own container, and
+none of the three is documented. Full notes are at the top of `dmctex.py`; the
+short version:
+
+| Game | Where | Container | Pixels |
+|---|---|---|---|
+| DMC1 | inside `.pld` / `.pws` / `.pwd` / `.emd` / `.fsd` | Pipeworks `T32`/`TM2`, big-endian, magic stored word-reversed | DXT1, DXT5 or ARGB8888 |
+| DMC2 | inside `.mdl` / `.mdz` | stock PS2 TIM2, one picture per block, grouped by MOMO section | PSMT8 with a 256-entry CSM1 palette, mostly |
+| DMC3 | entry 0 of each model `.PAC` | big-endian size table in 2 KiB units | DXT1 or DXT5, **every block's 32-bit words rotated by one** |
+
+Three things worth knowing, because each one costs an afternoon if you meet it
+cold:
+
+- **The HD port re-encoded DMC1 and DMC3 to DXT at twice the PS2 resolution.**
+  The DMC3 header carries the original size alongside the stored one; the UVs
+  are normalised, so the extra resolution is free.
+- **DMC3's DXT blocks are word-rotated.** Read straight, they decode to
+  plausible-looking noise rather than to nothing, which is the trap.
+- **There are no textures in `ipum` blocks.** That magic turns up only in
+  `ID55??.PAC` — those are PS2 IPU video streams, not art.
+
+Pairing a mesh to its image is its own problem, since a `texIndex` counts from
+zero inside whichever container the mesh belongs to. Textures follow the
+geometry that uses them, so meshes are grouped by which container comes next
+and the **group** picks a container big enough to hold every slot it asks for.
+That last part matters: a DMC1 enemy drops one- and four-image containers
+(damage states) between a body and the nine-image container the body actually
+indexes into. 737 of the 741 models pair cleanly.
 
 ---
 
