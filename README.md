@@ -1,7 +1,9 @@
 # DMC Model Extractor
 
 Pulls the 3D models out of **Devil May Cry HD Collection (PS3)** and writes them
-as textured `.obj` files you can open in Blender.
+as textured `.obj` files you can open in Blender. DMC2's and DMC3's characters
+also come out **rigged and animated**, as `.glb` files with every motion the game
+ships for them.
 
 You drop your disc image into the `iso/` folder and run **one command**.
 
@@ -9,15 +11,19 @@ You drop your disc image into the `iso/` folder and run **one command**.
 |---|---|---|---|---|
 | DMC1 | 10 | 5 | 58 | 99 |
 | DMC2 | *(inside the players)* | 8 | 51 | 26 |
-| DMC3 | 121 | 48 | 315 | *(format not read)* |
+| DMC3 | 143 | 49 | 367 | *(format not read)* |
 
-**741 OBJ files in all**, with **1,756 PNG textures** — 737 of the 741 open
+**816 OBJ files in all**, with **1,893 PNG textures** — 813 of the 816 open
 already textured.
+
+**191 rigged, animated models** on top of that — 85 from DMC2 and 106 from DMC3,
+carrying **8,456 animations** between them (see [section 5](#5-animations)).
 
 The file formats are undocumented — no public spec, and no Noesis or Blender
 plugin exists for DMC1/DMC2. They were reverse-engineered for this repo. Format
 notes are in the comments at the top of `bdp.py`, `dmcmesh.py`, `modbe2.py` and
-`dmctex.py` — the last one covers all three games' texture containers.
+`dmctex.py` — the last one covers all three games' texture containers — and, for
+skeletons and motions, `dmc3anim.py` and `dmc12anim.py`.
 
 ---
 
@@ -99,12 +105,16 @@ resolved relative to the script.
 ISO:   ...\iso\Devil May Cry - HD Collection (USA) ....iso
 7-Zip: C:\Program Files\7-Zip\7z.exe
 
-[1/4] Reading the ISO (this takes a few minutes, ~4.6 GB)
-[2/4] Unpacking the DMC1 and DMC2 bundles
-[3/4] Converting DMC1 and DMC2 to OBJ
+[1/5] Reading the ISO (this takes a few minutes, ~4.6 GB)
+[2/5] Unpacking the DMC1 and DMC2 bundles
+[3/5] Converting DMC1 and DMC2 to OBJ
 OK   pw08             meshes=  3 verts=   376 tris=   236 nrmlen=1.0000 tex=1
 ...
-[4/4] Unpacking and converting DMC3
+[4/5] Unpacking and converting DMC3
+...
+[5/5] Rigging and animating the characters
+OK   em00_gm              bones=26 meshes=  7 anims=  89
+OK   PL000_PAC_01                 bones=24 meshes= 17 anims= 477
 
 Done. OBJ files written to ...\out:
    DMC1_enemies       58 obj    269 png
@@ -114,9 +124,11 @@ Done. OBJ files written to ...\out:
    DMC2_enemies       51 obj    282 png
    DMC2_players        8 obj    185 png
    DMC2_props         26 obj    181 png
-   DMC3_enemies      315 obj    335 png
-   DMC3_players       48 obj     60 png
-   DMC3_weapons      121 obj    121 png
+   DMC3_enemies      367 obj    435 png
+   DMC3_players       49 obj     74 png
+   DMC3_weapons      143 obj    144 png
+   DMC2_animated      85 glb  (rigged, with their animations)
+   DMC3_animated     106 glb  (rigged, with their animations)
 ```
 
 The first run takes around twenty minutes, most of it reading the ISO. **Running it again is safe** — it skips the
@@ -135,7 +147,9 @@ out/
 ├── DMC2_props/       sobj_10.obj ...                <- stage objects
 ├── DMC3_weapons/     PLWP_SHOTGUN_PAC_01.obj ...
 ├── DMC3_players/     PL000_PAC_01.obj ...           <- Dante, Vergil, Lady, NPCs
-└── DMC3_enemies/     EM000_PAC_01.obj ...
+├── DMC3_enemies/     EM000_PAC_01.obj ...
+├── DMC2_animated/    em00_gm.glb, pl00_gm_s00.glb ...   <- rigged + animated
+└── DMC3_animated/    DMC3_players/PL000_PAC_01.glb ...  <- rigged + animated
 ```
 
 Each folder also holds a `.mtl` per model and a `textures/` subfolder of PNGs:
@@ -165,7 +179,7 @@ goes in too: `pl00_gm_s03_tex1.png`.
 
 > ✅ **`nrmlen=1.0000` in the output is your proof it worked.** That's the
 > average length of the surface normals. Geometry read correctly gives 1.0000;
-> 716 of the 741 files are exact. A dozen land between 0.92 and 0.99 — PS2-era
+> almost every file is exact. A dozen land between 0.92 and 0.99 — PS2-era
 > normals that were quantised slightly short, not a misread. Anything far off
 > that would mean the file was read wrong.
 
@@ -267,7 +281,65 @@ indexes into. 737 of the 741 models pair cleanly.
 
 ---
 
-## 5. Running the individual scripts
+## 5. Animations
+
+DMC2's and DMC3's characters come out a second time as **glTF binary (`.glb`)**:
+the textured mesh, bound to its skeleton with the game's own skin weights, plus
+every motion that belongs to it as a named animation.
+
+```
+out/DMC2_animated/            em00_gm.glb, pl00_gm_s00.glb ...
+out/DMC3_animated/
+├── DMC3_players/             PL000_PAC_01.glb  (Dante, 477 animations) ...
+├── DMC3_enemies/             EM000_PAC_01.glb ...
+└── DMC3_weapons/             PLWP_NUNCHAKU_PAC_01.glb ...
+```
+
+### Opening one in Blender
+
+1. **Set the frame rate first:** *Output Properties → Format → Frame Rate → 60*.
+   The motions are keyed at 60 fps, the games' frame rate. Blender converts glTF
+   seconds into frames at the scene's rate, so at the default 24 they still play
+   at the right speed, but the keys land between frames.
+2. *File → Import → glTF 2.0* and pick the `.glb`.
+3. Every motion arrives as an Action. Pick one in the *Action Editor* (Dope Sheet
+   → Action Editor, armature selected) or the *NLA Editor*, and press play.
+
+Any engine or tool that reads glTF works the same way.
+
+### Where the motions came from, and how they were paired
+
+- **DMC3** keeps a character's motions *inside its own model PAC*, as `MOT`
+  entries in the nested sub-PACs (they unpack as `NN.bin`). Players carry most
+  of theirs in the `PL???_??_?.PAC` files next to the model — which the
+  extractor used to skip as "costumes". A motion belongs to a model when its
+  bone count matches the model's skeleton. A few bodies have one extra bone the
+  motions don't drive (EM000, EM006, EM010), so a model also takes the motions
+  one bone smaller when no other model in the PAC has that size, or when nothing
+  matches it exactly.
+- **DMC2** keeps them in a companion file: `em00_gm.mdl` → `em00_gm.dat`. A
+  DMC2 model file holds several sub-models (`_s00`, `_s03`...), and each gets
+  the motions whose bone count matches it.
+
+Animation names say where each motion lives: `02_05` is entry 5 of sub-PAC 02
+inside the model's own PAC, `PL000_00_3_07` is entry 7 of `PL000_00_3.PAC`, and
+DMC2's `motion_012` is entry 12 of the `.dat`. The game gives them no names.
+
+Root motion is kept: a walk or dash really travels. Bones a motion does not
+touch stay in their bind pose.
+
+### What pairing by bone count can't know
+
+Where several models in one PAC share a skeleton size — enemy variants, a
+character's alternate forms — each gets the whole set. That is right for
+variants (they are built to share motions) but it means a model can carry a few
+motions meant for its sibling. DMC3's weapon GLBs animate only the weapon's own
+bones (the nunchaku has 11, Nevan 6); how a weapon moves in Dante's hand is his
+motion, not the weapon's.
+
+---
+
+## 6. Running the individual scripts
 
 You do **not** need any of this if you just ran `dmcextract.py`. It is here for
 picking apart single files or poking at the formats.
@@ -282,8 +354,10 @@ picking apart single files or poking at the formats.
 | `dmc2obj.py` | `python dmc2obj.py <game> <pattern>... <outdir>` | DMC1/DMC2 files → OBJ |
 | `unpack_all.py` | `python unpack_all.py [<GDATA.AFS dir>] [<out dir>] [<pattern>]` | DMC3 `.PAC` → `.mod` (pattern defaults to `PLWP_*.PAC`; use `EM???.PAC` or `PL???.PAC` for the characters) |
 | `modbe2.py` | `python modbe2.py [<unpacked dir>] [<out dir>]` | DMC3 `.mod` → OBJ |
+| `dmc3anim.py` | `python dmc3anim.py [<unpacked dir>] [<GDATA.AFS dir>] [<out dir>] [<pattern>]` | DMC3 models + skeletons + `MOT` motions → animated `.glb` (pattern like `PL000` or `EM0*`) |
+| `dmc12anim.py` | `python dmc12anim.py dmc2 <extract/DMC2/data dir> <out dir> [<pattern>]` | DMC2 `.mdl` + `.dat` → animated `.glb` (pattern like `em00_gm`) |
 | `dmcmesh.py` | not run directly | shared mesh reader used by `dmc2obj.py` |
-| `dmctex.py` | not run directly | shared texture reader � all three games' formats, and the PNG writer |
+| `dmctex.py` | not run directly | shared texture reader — all three games' formats, and the PNG writer |
 
 ### `dmc2obj.py` arguments
 
@@ -306,12 +380,13 @@ python dmc2obj.py dmc1 "build/extract/DMC1/data/pld/*.pws" myweapons
 ### Keeping the files together
 
 `dmc2obj.py` imports `dmcmesh.py` and `dmctex.py`, `modbe2.py` and
-`unpack_all.py` import `dmctex.py`, and `extract.py` imports `bdp.py`. **Keep all
-the `.py` files in one folder** or those imports fail.
+`unpack_all.py` import `dmctex.py`, `dmc3anim.py` imports `modbe2.py`,
+`dmc12anim.py` imports `dmc3anim.py` and `dmcmesh.py`, and `extract.py` imports
+`bdp.py`. **Keep all the `.py` files in one folder** or those imports fail.
 
 ---
 
-## 6. When something goes wrong
+## 7. When something goes wrong
 
 **`python: command not found` / `'python' is not recognized`**
 Python isn't installed, or wasn't added to PATH. Reinstall and tick "Add Python
@@ -334,25 +409,33 @@ terminal, then try again:
 $env:PYTHONIOENCODING = "utf-8"
 ```
 
-**An OBJ opens but looks like a scrambled pile of parts**
-Expected for **character models** in all three games. Their meshes are stored in
-bone-local space — each body part sits at its own origin, and the skeleton has
-not been reverse-engineered, so they cannot be assembled automatically. Move the
-parts by hand in Blender; the `obj<NN>` group names tell you what belongs
-together. DMC1 weapons and props do not have this problem.
+**An OBJ opens with extra parts piled at the origin**
+The body itself is assembled — every game stores it in its bind pose — but a
+character file also carries other sub-models: held weapons, effect meshes,
+alternate heads and damage states. Many of those sit at the origin. Hide them
+with the `obj<NN>` groups in the outliner, or open the `.glb` in
+`DMC2_animated`/`DMC3_animated` instead, where each skeleton gets its own file.
+
+**An animated `.glb`'s keys fall between frames**
+The scene was at 24 fps when it was imported. Timing is still right, but set
+the scene to 60 fps *before* importing to get one key per frame (see
+[section 5](#5-animations)).
 
 **`ModuleNotFoundError: No module named 'dmcmesh'`**
 The `.py` files were separated. Keep them all in one folder.
 
 ---
 
-## 7. Known limits
+## 8. Known limits
 
-- **No textures.** The models have UV coordinates but no images. Texture decoding
-  is not implemented for any of the three games. The raw texture files are pulled
-  out into `build/extract/` (DMC1 `.t32`/`.tm2`, DMC2 `.tm2`) if you want to
-  attack that.
-- **No skeletons and no animation.** Geometry only.
+- **DMC1 is not animated yet.** Its motions are found and mostly decoded — they
+  live in the model file itself (section 6 of `pl00.pld`, 215 motions for
+  Dante) as Hermite keys in floats, with the same skeleton layout as DMC2 — but
+  DMC1 drives the legs by IK: a motion stores foot-target and pole positions
+  instead of hip rotations, and those have to be solved back into bone
+  rotations. Until that solver exists, DMC1 ships as static OBJ only.
+- **The skeleton comes without bone names.** The games don't store any; bones
+  are `bone00`, `bone01`... in hierarchy order.
 - **DMC2 has no separate weapon files.** Dante's and Lucia's weapons are
   sub-meshes inside `pl*_gm.obj` — `pl00_gm` holds his coat and the Rebellion
   blade. Open it in Blender and pick the parts you want.
@@ -371,14 +454,12 @@ The `.py` files were separated. Keep them all in one folder.
 - **DMC2 stage geometry is out too.** `st*_*.bin` is MOMO with the same object
   records but a 16-byte mesh descriptor whose arrays are implied rather than
   pointed at — a different variant, not yet reversed. Only `sobj_*` props parse.
-- **DMC3 costume PACs are skipped.** `PL???_??_?.PAC` carry no geometry of their
-  own, so the extractor leaves them on the disc.
 - These are PS2-era models — 200–750 vertices for a weapon. They are reference
   geometry, not modern drop-in assets.
 
 ---
 
-## 8. Legal
+## 9. Legal
 
 Tools only. No game data is included or distributed here. Use them on a copy of
 the game you own. The extracted models remain Capcom's property — keep the

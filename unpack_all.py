@@ -4,8 +4,11 @@ Both magics are the same big-endian structure:
     magic 'PAC\\0' or 'PNST' | u32 count @4 | u32 offset table @8
 An entry ends where the next begins. Containers nest, so this recurses.
 The model archives are really PNST containers holding 'MOD ' meshes:
-PLWP_*.PAC (weapons), PL???.PAC (players) and EM???.PAC (enemies). Entry 0 of
-each one is its texture block, written out here as `00.tex`; see dmctex.py.
+PLWP_*.PAC (weapons), PL???.PAC (players) and EM???.PAC (enemies). Entry 0
+of each one is its texture block, written out here as `00.tex`; see dmctex.py.
+Some meshes are 'EFM ' instead - the same layout under another magic, used by
+several enemy bodies and many effect meshes - and are written out as .mod too.
+The nested .bin entries include the 'MOT' motions dmc3anim.py reads.
 
     python unpack_all.py [<GDATA.AFS dir>] [<output dir>] [<pattern>]
 
@@ -20,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dmctex
 
 CONTAINERS = (b'PAC\x00', b'PNST')
+MESHES = (b'MOD ', b'EFM ')
 
 
 def is_container(b):
@@ -56,16 +60,16 @@ def walk(b, outdir, found, depth=0, tag="root", quiet=False):
         else:
             # .tex marks the texture blocks so modbe2 can find the one that
             # belongs to a mesh by looking in its own folder and then upwards
-            ext = ('mod' if m == b'MOD ' else 'shw' if m == b'SHW '
+            ext = ('mod' if m in MESHES else 'shw' if m == b'SHW '
                    else 'tex' if dmctex.is_dmc3_textures(sub) else 'bin')
             fn = os.path.join(outdir, f"{i:02d}.{ext}")
             with open(fn, 'wb') as f:
                 f.write(sub)
-            if m == b'MOD ':
+            if m in MESHES:
                 found.append(fn)
             if not quiet:
                 note = (" ver(BE)=%.3f" % struct.unpack_from('>f', sub, 4)[0]
-                        if m == b'MOD ' else "")
+                        if m in MESHES else "")
                 print(f"{pad}  [{i:02d}] size={len(sub):>8} '{am}' -> {fn}{note}")
 
 

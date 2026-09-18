@@ -1,13 +1,17 @@
 """DMC3: convert big-endian 'MOD ' meshes to OBJ.
 
 PS3 'MOD ' format (big-endian):
-    0x00 magic 'MOD ' | 0x04 f32 version | 0x10 u8 objectCount, u8 boneCount, u8 numTex
-    0x30 OBJECT records, stride 16:  u8 meshCount | u8 ? | i16 numVerts | i32 mshOffs
+    0x00 magic 'MOD ' (or 'EFM ', same layout) | 0x04 f32 version
+    0x10 u8 objectCount, u8 boneCount, u8 numTex | 0x1c u32 skeleton offset
+    0x30 OBJECT records, stride 48:  u8 meshCount | u8 ? | i16 numVerts | i32 mshOffs
+         ... | 0x20 f32 x, y, z, radius (bounding sphere)
          MESH records at mshOffs, stride 32:
            i16 numVerts | i16 texInd | 8 skip |
            i32 pos | i32 nrm | i32 uv | i32 boneIdx | i32 weights
     positions/normals 3xf32, UVs 2xi16/4096 with V flipped, bone 4 B, weights u16.
     Geometry is triangle strips; bit 15 of the weight is the strip break.
+    Vertices are in model space, already in the bind pose, so every part lands
+    where it belongs. The skeleton and skin weights are read by dmc3anim.py.
 
 Note the PC port puts objects at 0x40 with int64 offsets - that is why IgrBn's
 addon silently imports zero objects from PS3 files.
@@ -51,12 +55,12 @@ def parse(path):
     with open(path, 'rb') as f:
         b = f.read()
     N = len(b)
-    if b[:4] != b'MOD ':
+    if b[:4] not in (b'MOD ', b'EFM '):
         return None
     oc, bc = b[0x10], b[0x11]
     meshes = []
     for oi in range(oc):
-        o = 0x30 + oi * 16
+        o = 0x30 + oi * 0x30
         if o + 8 > N:
             break
         meshCount = b[o]
