@@ -16,8 +16,9 @@ You drop your disc image into the `iso/` folder and run **one command**.
 **816 OBJ files in all**, with **1,893 PNG textures** — 813 of the 816 open
 already textured.
 
-**191 rigged, animated models** on top of that — 85 from DMC2 and 106 from DMC3,
-carrying **8,456 animations** between them (see [section 5](#5-animations)).
+**313 rigged, animated models** on top of that — 46 from DMC1 (leg IK solved),
+102 from DMC2, 59 DMC2 cutscene actors and 106 from DMC3 — carrying **21,144
+animations** between them (see [section 5](#5-animations)).
 
 The file formats are undocumented — no public spec, and no Noesis or Blender
 plugin exists for DMC1/DMC2. They were reverse-engineered for this repo. Format
@@ -127,7 +128,9 @@ Done. OBJ files written to ...\out:
    DMC3_enemies      367 obj    435 png
    DMC3_players       49 obj     74 png
    DMC3_weapons      143 obj    144 png
-   DMC2_animated      85 glb  (rigged, with their animations)
+   DMC1_animated      46 glb  (rigged, with their animations)
+   DMC2_animated     102 glb  (rigged, with their animations)
+   DMC2_cutscenes     59 glb  (rigged, with their animations)
    DMC3_animated     106 glb  (rigged, with their animations)
 ```
 
@@ -283,12 +286,14 @@ indexes into. 737 of the 741 models pair cleanly.
 
 ## 5. Animations
 
-DMC2's and DMC3's characters come out a second time as **glTF binary (`.glb`)**:
+All three games' characters come out a second time as **glTF binary (`.glb`)**:
 the textured mesh, bound to its skeleton with the game's own skin weights, plus
 every motion that belongs to it as a named animation.
 
 ```
+out/DMC1_animated/            pl00_s00.glb (Dante, 215), em00.glb ...
 out/DMC2_animated/            em00_gm.glb, pl00_gm_s00.glb ...
+out/DMC2_cutscenes/           edm_000_s00.glb ... (cutscene actors, see below)
 out/DMC3_animated/
 ├── DMC3_players/             PL000_PAC_01.glb  (Dante, 477 animations) ...
 ├── DMC3_enemies/             EM000_PAC_01.glb ...
@@ -320,10 +325,37 @@ Any engine or tool that reads glTF works the same way.
 - **DMC2** keeps them in a companion file: `em00_gm.mdl` → `em00_gm.dat`. A
   DMC2 model file holds several sub-models (`_s00`, `_s03`...), and each gets
   the motions whose bone count matches it.
+  The costumes (`pl03`..`pl07`) ship without a `.dat`; each borrows the bank
+  of the player whose skeleton it matches (`pl04`/`pl06` Dante's,
+  `pl03`/`pl05`/`pl07` Lucia's).
+- **DMC2 cutscenes** are in `edm_NNN_3.bin` (actors) and `edm_NNN_4.bin` (their
+  motions, float-keyed). The motions are listed actor by actor in model order,
+  and the same actor appears in many cutscenes, so identical actors are merged
+  into one `.glb` carrying every cutscene's motions, named `e000_017`
+  (cutscene 000, motion section 17). Positions are in scene space.
+- **DMC1** keeps them in the model file itself: section 6 (body) and 7 (coat)
+  of `pl00.pld`, sections 3 and 5 of an enemy's `.emd`. Dante's Devil Trigger
+  bodies (`pl01`, `pl03`, `pl06`) and `pl05` have none of their own and get
+  `pl00`'s 215. DMC1 animates legs by **IK**: a motion stores a target position
+  and a knee hinge axis, not hip/knee rotations. `dmc1anim.py` solves them back
+  into rotations (two-segment chains, law of cosines in the hinge plane), so
+  the `.glb` is plain forward kinematics that any tool plays. Its docstring
+  has the format.
 
 Animation names say where each motion lives: `02_05` is entry 5 of sub-PAC 02
 inside the model's own PAC, `PL000_00_3_07` is entry 7 of `PL000_00_3.PAC`, and
-DMC2's `motion_012` is entry 12 of the `.dat`. The game gives them no names.
+DMC2's `motion_012` is entry 12 of the `.dat`, and DMC1's `bank6_012` is
+motion 12 of section 6. The games give them no names.
+
+**Hair and coats are merged in.** The games keep a character's hair, coat tails
+and scarf as separate little models with their own physics skeleton, hung on a
+body bone at run time; no body motion drives them, so they used to be left out
+(bald heads, no coats). `dmcattach.py` now merges them into the body `.glb`:
+DMC3 Dante's and Vergil's coats and Lady's hair (the second `.mod` in the PAC),
+DMC2 Dante's hair and coat tails, Lucia's hair and scarf, Trish's hair (and the
+costumes). Each part vertex is skinned like its nearest body vertices, so coats
+swing with the legs and hair turns with the head; the cloth simulation itself
+isn't reproduced.
 
 Root motion is kept: a walk or dash really travels. Bones a motion does not
 touch stay in their bind pose.
@@ -356,6 +388,8 @@ picking apart single files or poking at the formats.
 | `modbe2.py` | `python modbe2.py [<unpacked dir>] [<out dir>]` | DMC3 `.mod` → OBJ |
 | `dmc3anim.py` | `python dmc3anim.py [<unpacked dir>] [<GDATA.AFS dir>] [<out dir>] [<pattern>]` | DMC3 models + skeletons + `MOT` motions → animated `.glb` (pattern like `PL000` or `EM0*`) |
 | `dmc12anim.py` | `python dmc12anim.py dmc2 <extract/DMC2/data dir> <out dir> [<pattern>]` | DMC2 `.mdl` + `.dat` → animated `.glb` (pattern like `em00_gm`) |
+| `dmc12anim.py` | `python dmc12anim.py dmc2events <extract/DMC2/data dir> <out dir> [<event>]` | DMC2 cutscene actors + motions → animated `.glb` |
+| `dmc1anim.py` | `python dmc1anim.py <extract/DMC1/data dir> <out dir> [<pattern>]` | DMC1 `.pld`/`.emd` + IK solve → animated `.glb` (pattern like `pl00` or `em0*`) |
 | `dmcmesh.py` | not run directly | shared mesh reader used by `dmc2obj.py` |
 | `dmctex.py` | not run directly | shared texture reader — all three games' formats, and the PNG writer |
 
@@ -428,12 +462,13 @@ The `.py` files were separated. Keep them all in one folder.
 
 ## 8. Known limits
 
-- **DMC1 is not animated yet.** Its motions are found and mostly decoded — they
-  live in the model file itself (section 6 of `pl00.pld`, 215 motions for
-  Dante) as Hermite keys in floats, with the same skeleton layout as DMC2 — but
-  DMC1 drives the legs by IK: a motion stores foot-target and pole positions
-  instead of hip rotations, and those have to be solved back into bone
-  rotations. Until that solver exists, DMC1 ships as static OBJ only.
+- **DMC1 Trish (`em24`) has no hair.** Her hair is in none of the DMC1 files
+  the extractor reads. (DMC2 Trish, `pl02_gm`, is complete.)
+- **DMC1 Dante (`pl00`) carries the Ifrit gauntlets** as body parts 21 and 22;
+  hide them in the catalog, which does so by default.
+- **DMC1's IK is solved offline.** Unreachable targets straighten the leg
+  towards them (jumps and falls), and one extra rotation channel per motion,
+  which does not fit the body as a root rotation, is left out.
 - **The skeleton comes without bone names.** The games don't store any; bones
   are `bone00`, `bone01`... in hierarchy order.
 - **DMC2 has no separate weapon files.** Dante's and Lucia's weapons are

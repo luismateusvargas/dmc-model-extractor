@@ -31,8 +31,10 @@ def dump(bundle, outdir, patterns):
 # (.fsd), plus the textures nobody has decoded yet
 DMC1_PATTERNS = ("*.pws", "*.pwd", "*.pld", "*.emd", "*.fsd", "*.tm2", "*.t32")
 # players and enemies (.mdl/.mdz) with their motion banks (*_gm.dat), stage
-# props (sobj_*.bin), textures
-DMC2_PATTERNS = ("*.mdl", "*.mdz", "*_gm.dat", "sobj_*.bin", "*.tm2")
+# props (sobj_*.bin), textures, and the cutscene actors (edm_NNN_3.bin) with
+# their motions (edm_NNN_4.bin)
+DMC2_PATTERNS = ("*.mdl", "*.mdz", "*_gm.dat", "sobj_*.bin", "*.tm2",
+                 "edm_*_3.bin", "edm_*_4.bin")
 
 if __name__ == "__main__":
     # python extract.py [<bundles dir>] [<output dir>]

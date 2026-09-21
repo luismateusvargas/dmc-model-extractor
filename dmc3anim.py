@@ -49,6 +49,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dmctex
 import modbe2
+import dmcattach
 
 FPS = 60.0
 # a bone's tracks are stored translation first, then rotation, then scale -
@@ -401,7 +402,7 @@ def write_glb(path, name, skel, meshes, images, motions):
     g['scenes'][0]['nodes'] = [len(g['nodes']) - 1, mesh_node]
     # animations
     for aname, mot in motions:
-        nf, baked = bake(mot, skel)
+        nf, baked = mot['baked'] if 'baked' in mot else bake(mot, skel)
         times = G.acc([f / FPS for f in range(nf + 1)], 5126, 'SCALAR', None, True)
         samplers, channels = [], []
         for bone, data in enumerate(baked):
@@ -468,6 +469,24 @@ def convert(unpacked, afs, outdir, pattern='*'):
                 continue
             name = "%s_%s" % (os.path.basename(d), os.path.splitext(os.path.basename(mp))[0])
             images = dict(enumerate(modbe2.textures_for(mp, unpacked, cache)))
+            # hair / coat models that hang on this body (see dmcattach.py)
+            parts = []
+            stem = os.path.splitext(os.path.basename(mp))[0]
+            for k, (ps, want, keep) in enumerate(dmcattach.DMC3.get(pac, {}).get(stem, []), 1):
+                pp = os.path.join(d, ps + '.mod')
+                if not os.path.exists(pp):
+                    continue
+                with open(pp, 'rb') as f:
+                    pb = f.read()
+                psk, pm = parse_skeleton(pb), parse_meshes(pb)
+                if psk and pm:
+                    parts.append((psk, pm, k, want, None, keep))
+                    for t, img in enumerate(modbe2.textures_for(pp, unpacked, cache)):
+                        images[(k, t)] = img
+            if parts:
+                skel, meshes, rep = dmcattach.merge(skel, meshes, parts)
+                print("     %s: attached %s" % (name, ', '.join('%s.mod on bone%02d' % (
+                    dmcattach.DMC3[pac][stem][r[0] - 1][0], r[1]) for r in rep)))
             motions = []
             for p, i, m in mine:
                 rel = os.path.relpath(p, d) if p.startswith(d) else os.path.basename(p)

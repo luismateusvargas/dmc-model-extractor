@@ -27,6 +27,7 @@ import unpack_all
 import modbe2
 import dmc3anim
 import dmc12anim
+import dmc1anim
 from dmc2obj import convert as obj_convert
 
 REPO = os.path.dirname(os.path.abspath(__file__))
@@ -182,7 +183,9 @@ def main():
     # ---- 4. skeletons and motions -----------------------------------------
     print("\n[5/5] Rigging and animating the characters")
     glbs = {}
-    for name, run in (("DMC2_animated", lambda o: dmc12anim.convert_dmc2(d2, o)),
+    for name, run in (("DMC1_animated", lambda o: dmc1anim.convert(d1, o)),
+                      ("DMC2_animated", lambda o: dmc12anim.convert_dmc2(d2, o)),
+                      ("DMC2_cutscenes", lambda o: dmc12anim.convert_dmc2_events(d2, o)),
                       ("DMC3_animated", lambda o: dmc3anim.convert(
                           os.path.join(BUILD, "unpacked"), afs, o))):
         anim = os.path.join(OUT, name)
